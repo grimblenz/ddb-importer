@@ -513,6 +513,7 @@ const DICTIONARY = {
       { name: "Artificer", value: "prepared" },
       { name: "Artificer (UA)", value: "prepared" },
       { name: "Bard", value: "always" },
+      { name: "Barbarian", value: "always" },
       { name: "Blood Hunter", value: "pact" },
       { name: "Blood Hunter (archived)", value: "pact" },
       { name: "Cleric", value: "prepared" },
