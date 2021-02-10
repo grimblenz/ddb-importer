@@ -1,3 +1,221 @@
+# 0.4.6
+
+* Claws added to weapon icons.
+* Dragon Hide feat now detects AC bonus.
+* Munching: source filter is now applied to spells and items.
+
+# 0.4.5
+
+* Ammunition that had been customised with silvered property failed to import.
+* Some Effects on actors would cause the importer to stumble.
+* Items with changed quantity did not update when Updating D&D Beyond.
+
+# 0.4.4
+
+* Good selection of Class Features Added to icon list. (Thanks @Zac !)
+* Iron Bands of Binding did not import.
+* Bug fix: some AC mods, typically unarmed fighting were not detected in some cases.
+
+# 0.4.3
+
+* MASSIVE BUG: Characters would not import some choices like ability scores during levelling.
+* Improved Active Effects transfer.
+
+# 0.4.1/0.4.2
+
+* Bug resulted in Optional Class feature modifiers applied, even if not selected. Please let me know if there are missing features and abilities after installing this version.
+* Medium Armour Master did not set increased Dex mod for AC.
+* Support for off-hand weapons, dual weilding and two-weapon fighting.
+
+# 0.4.0
+
+* Supporters can now import Extras, these are attached to characters on D&D Beyond. These are things like Ranger Companions, Wild Shape, pets, sidekicks etc.
+* If using the magicitems modules, spells for magic items now go into subfolders for their item names.
+* Character Sync has been renamed Update D&D Beyond to avoid confusion.
+* In some cases characters wouldn't import because senses default data was incorrect.
+
+# 0.3.10
+
+* In some cases healing potions would break import.
+* Improve parsing of abilities that have dice associated with them but are not attacks.
+* Actions now have an option to use the snippet rather than full text during character import.
+
+# 0.3.8/0.3.9
+
+* Feat, Class, and Races munch now available to Undying supporters.
+
+# 0.3.7
+
+* Cantrip scaling gave incorrect results if character has Potent Spellcasting or similar.
+* Werewolf processed it's attack actions incorrectly due to inconsistent formatting.
+* Custom proficiencies were not applied to weapons.
+
+# 0.3.6
+
+* After the next character sync the ability to sync action uses will be available.
+* If you have restricted import to trusted users only, you can now allow those users to sync their characters.
+* Parse things like Way of Astral Self Wisdom based martial arts attack.
+
+# 0.3.5
+
+* New items added to characters from the DDB Item compendium can now be added to characters during sync.
+* Equipment sync will update attunement, equipped status and charges used on items.
+* Before the option to use Equipment sync appears your character will need to be re-imported using version 0.3.5.
+
+# 0.3.4
+
+* Fix some instances of the template parser not parsing correctly, e.g. Arcane Archer.
+* Item screen title bar icon respects white colour choice as well!
+* You can now retain Resource Consumption links on individual items/features/spells during updates.
+
+# 0.3.3
+
+* Monsters with Sneak Attack now parse the feature damage correctly. (Thanks bekriebel!)
+* Ignored items did not transfer Active Effects on import update.
+* Retain condition effects created by CUB.
+* Title bar icon can now be set to white.
+* Monsters with a ’ in the name such as Grum’shar would not import if searched for explicitly.
+
+# 0.3.2
+
+* Active Effect copy did not copy effects just on the character.
+* Active Effects on a character could be duplicated on re-import.
+* Active Effects did not retain current enabled status on character.
+* Clarified the intent of various Active Effect copy Advanced Settings.
+
+# 0.3.1
+
+* Character Sync now supports XP.
+* Owned Items on a character now have a title bar button. This allows an item (or just it's icon) to be excluded from the import when the characer import runs. This is useful if you have added or altered items/spells/features etc to a sheet and wish to retain them. Please let me know if there are specific aspects that would be useful to retain on a item.
+
+# 0.3.0
+
+* Major overhaul of the visual interface.
+* New Inbuilt Icon Matching feature (many thanks to @Zac and others who have been filling in details here). All equipment, Spells and Feats in DDB can now be matched against one of the standard 5e provided system or Foundry icons.
+* Monster URL link to DDB now can be selectively in the title bar or next to the name.
+* DDB Importer link on the character sheet can be selectively in the title bar or next to the name.
+* Icon used by DDB Importer changed to the awesome fonts D&D Beyond brand image.
+* Feat import failed if use SRD was selected.
+* Source filtering now available for Undying Tier supporters.
+* Some items like vials and flasks will now show up as consumable.
+* Some actions which had consume actions had to be edited before they could be rolled.
+* Some items would not import if their charge reset type was not specified.
+* Patreon supporters now have access to a limited Character Sync option. This will sync Hit Points, Hit Dice, Exhaustion, Currency, Spell Slots, Spells Prepared, Death Saves, and Inspiration. Action uses, biography/notes, and Equipment will be coming soon.
+
+# 0.2.32/0.2.33
+
+* Some speed bonuses applied to all speed types.
+* More metadata additions for various future improvements.
+* Monster/NPC sheet open URL button now appears on title bar, to reduce sheet breakage.
+* When a characters skill proficiencies are not selected it no longer bombs out.
+
+# 0.2.31
+
+* Allow Classes to be optionally updated on character update/import.
+* Improved spell and item metadata.
+* Some features (like Rage) were duplicated twice - once as a passive and once as active. This caused problems with tools likes DAE where both features would be changed. Now just the active feature is imported.
+* Better detection of Better Rolls consume uses flag.
+* If you're not using a cobalt cookie character parsing would fail for some character types.
+
+# 0.2.30
+
+* Bulk spell import was failing.
+
+# 0.2.29
+
+* Some optional class features like Wild Companion no longer imported due to JSON change.
+* Small improvements to file detection performance.
+* Improved parsing of Stirge, Grell and other creatures with a multi-paragraph attack block.
+* Spirit Guardians now attempts to deduce your damage type based on alignment.
+
+# 0.2.27/0.2.28
+
+* Correct Eldritch Cannon: Force Ballista
+* Improved detection of files and (hopefully) reduction in forge upload messages
+
+# 0.2.25
+
+* Improved debugging.
+
+# 0.2.25
+
+* Eldritch cannon parsing improvements.
+* Fix issue where some actions would fail to parse (notably artificiers).
+
+# 0.2.24
+
+* Improved senses parsing. Blind Fighting now imports blindsight.
+* Enriched action parsing for things like Unarmed Fighting actions.
+* Fix feat import requirements section.
+
+# 0.2.23
+
+* Experimental beta Feat imports available to God Tier patreon supporters (coming to other tiers later).
+
+# 0.2.22
+
+* Munching Spells and Items can now copy over DAE SRD effects.
+* Support Silvered, Magical and Adamantine weapon properties.
+* Retain journal notes on characters.
+* Some NPC's like Nezznar did not match some spells due to formatting differences.
+* Another bug squashed preventing npcs importing from SRD compendiums.
+
+# 0.2.21
+
+* Copy over new attunement status on compendium matched items.
+* Race and Class feature imports fill out requirements field.
+* You can now import from SRD compendiums again.
+* Character with no name will now import.
+
+# 0.2.20
+
+* Monks unarmoured speed added to all speed types.
+* Correct Flaming Sphere template size.
+* Improved SRD Icon matching speed.
+* Bloodhunter subclasses now import.
+* Duplicate class features now import as separate features.
+* Class Optional features now import in class munch.
+
+# v 0.2.19
+
+* Monster action name is no longer included in the action description.
+* Some abilities like Chef: Special Food did not calculate users correctly.
+* Importing from compendium did not work if action type had changed.
+* Some legendary actions split the charges used into a separate action (e.g. Aboleth).
+
+# v 0.2.18
+
+* Add missing character URL back, will fix broken shift-click functionality on the B icon.
+* Spells from some class feature edge cases did not import after Tasha's changed, e.g. Divine Soul extra spells.
+* Some string parsing in descriptions resulted in ad "+ +" rather than "+".
+* When using a cobalt cookie authentication will now be attempted to retrieve private characters. (i.e. character can now be set to private and imported, as long as you have permission to view them).
+* DAE preferred midi compendium when midi-qol was not installed.
+
+# v 0.2.17
+
+* Workflow for prompting for key change
+* Monster munch: allow filtering by exact name match [Undying and God tier Patreon supporters]
+* Monster munch: filter by source book [God tier Early Access feature]
+
+# v 0.2.16
+
+* Retains Midi-QOL flags/settings on features/items
+* If it can, Character Imports will now update items rather than deleting and recreating. This will help modules like Better Roles with rely on item ID.
+* Class feature imports when copying SRD entries went to wrong compendium.
+* DAE feature swap now available for monsters.
+* General improvements to DAE imports for characters.
+* A characters magic item spells now import with icons, respecting character settings.
+* Monster Munch: Improved action parsing for monsters such as otyugh.
+* Monster Munch: Improved parsing of Legendary Actions.
+* Save proficiencies from feats, e.g. Resilient
+* Warlock monsters now import pact spells, pact spell slots also set and spells marked as pact spells.
+* Monster Munch: Improved attacks for monsters like Aurelia
+* Monster Munch: Include healing for actions like Warleaders Helix.
+* Skill Customization bonuses not coming through.
+* Improved parsing of Stone's Endurance, Divine Intervention, and Second Wind.
+* Healing potions will now roll damage.
+* Better matching for SRD replaced Healing potions.
+
 # v 0.2.14/0.2.15
 
 * Directory picker was not showing in settings screen.

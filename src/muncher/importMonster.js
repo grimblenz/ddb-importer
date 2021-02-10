@@ -1,7 +1,12 @@
 import utils from "../utils.js";
 import logger from "../logger.js";
 import DICTIONARY from "../dictionary.js";
-import { updateIcons, getImagePath, getCompendiumItems } from "./import.js";
+import { updateIcons, getImagePath, getCompendiumItems, getSRDIconLibrary, copySRDIcons } from "./import.js";
+import { munchNote } from "./utils.js";
+import { migrateItemsDAESRD } from "./dae.js";
+
+var compendiumLoaded = false;
+var monsterCompendium;
 
 /**
  *
@@ -44,11 +49,14 @@ async function retrieveSpells(spells) {
 // }
 
 async function getCompendium() {
+  if (compendiumLoaded) return monsterCompendium;
   const compendiumName = await game.settings.get("ddb-importer", "entity-monster-compendium");
   if (compendiumName && compendiumName !== "") {
-    const compendium = await game.packs.find((pack) => pack.collection === compendiumName);
-    if (compendium) {
-      return compendium;
+    monsterCompendium = await game.packs.find((pack) => pack.collection === compendiumName);
+    if (monsterCompendium) {
+      // eslint-disable-next-line require-atomic-updates
+      compendiumLoaded = true;
+      return monsterCompendium;
     }
   }
   return undefined;
@@ -65,6 +73,16 @@ async function addNPCToCompendium(npc) {
     if (entity) {
       if (game.settings.get("ddb-importer", "munching-policy-update-existing")) {
         const compendiumNPC = JSON.parse(JSON.stringify(npc));
+        const existingNPC = await compendium.getEntry(entity._id);
+
+        const updateImages = game.settings.get("ddb-importer", "munching-policy-update-images");
+        if (!updateImages && existingNPC.img !== "icons/svg/mystery-man.svg") {
+          compendiumNPC.img = existingNPC.img;
+        }
+        if (!updateImages && existingNPC.token.img !== "icons/svg/mystery-man.svg") {
+          compendiumNPC.token.img = existingNPC.token.img;
+        }
+
         compendiumNPC._id = entity._id;
 
         await compendium.updateEntity(compendiumNPC);
@@ -192,6 +210,7 @@ async function addSpells(data) {
   const atWill = spellList.atwill;
   const klass = spellList.class;
   const innate = spellList.innate;
+  const pact = spellList.pact;
 
   if (atWill.length !== 0) {
     logger.debug("Retrieving at Will spells:", atWill);
@@ -230,6 +249,22 @@ async function addSpells(data) {
         prepared: true,
       };
       getSpellEdgeCase(spell, "class", spellList);
+      return spell;
+    });
+    // eslint-disable-next-line require-atomic-updates
+    data.items = data.items.concat(spells);
+  }
+
+  // pact spells
+  if (pact.length !== 0) {
+    logger.debug("Retrieving pact spells:", pact);
+    let spells = await retrieveSpells(pact);
+    spells = spells.filter((spell) => spell !== null).map((spell) => {
+      spell.data.preparation = {
+        mode: "pact",
+        prepared: true,
+      };
+      getSpellEdgeCase(spell, "pact", spellList);
       return spell;
     });
     // eslint-disable-next-line require-atomic-updates
@@ -291,26 +326,37 @@ async function swapItems(data) {
 }
 
 // async function buildNPC(data, srdIconLibrary, iconMap) {
-async function buildNPC(data) {
+export async function buildNPC(data, temporary = true, update = false) {
   logger.debug("Importing Images");
   await getNPCImage(data);
   await addSpells(data);
   await swapItems(data);
+
+  // DAE
+  const daeInstalled = utils.isModuleInstalledAndActive("dae") && utils.isModuleInstalledAndActive("Dynamic-Effects-SRD");
+  const daeCopy = game.settings.get("ddb-importer", "munching-policy-dae-copy");
+  if (daeInstalled && daeCopy) {
+    munchNote(`Importing DAE Item for ${data.name}`);
+    // eslint-disable-next-line require-atomic-updates
+    data.items = await migrateItemsDAESRD(data.items);
+  }
+
   logger.debug("Importing Icons");
   // eslint-disable-next-line require-atomic-updates
   data.items = await updateIcons(data.items, false);
   // create the new npc
-  logger.debug("Importing NPC");
+  logger.debug("Creating NPC actor");
   const options = {
-    temporary: true,
-    displaySheet: true,
+    temporary: temporary,
+    displaySheet: false,
   };
-  let npc = await Actor.create(data, options);
+  let npc = (update) ? await Actor.update(data, options) : await Actor.create(data, options);
   return npc;
 }
 
 async function parseNPC (data) {
   let npc = await buildNPC(data);
+  logger.debug("Adding actor to compendium");
   await addNPCToCompendium(npc);
   return npc;
 }
@@ -329,3 +375,39 @@ export function addNPC(data) {
   });
 }
 
+export async function generateIconMap(monsters) {
+  let promises = [];
+
+  const srdIcons = game.settings.get("ddb-importer", "munching-policy-use-srd-icons");
+  // eslint-disable-next-line require-atomic-updates
+  if (srdIcons) {
+    const srdIconLibrary = await getSRDIconLibrary();
+    munchNote(`Updating SRD Icons`, true);
+    let itemMap = [];
+
+    monsters.forEach((monster) => {
+      munchNote(`Processing ${monster.name}`);
+      promises.push(
+        copySRDIcons(monster.items, srdIconLibrary, itemMap).then((items) => {
+          monster.items = items;
+        })
+      );
+    });
+  }
+
+  return Promise.all(promises);
+}
+
+export function copyExistingMonsterImages(monsters, existingMonsters) {
+  const updated = monsters.map((monster) => {
+    const existing = existingMonsters.find((m) => monster.name === m.name);
+    if (existing) {
+      monster.img = existing.img;
+      monster.token.img = existing.token.img;
+      return monster;
+    } else {
+      return monster;
+    }
+  });
+  return updated;
+}

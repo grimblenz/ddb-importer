@@ -1,29 +1,38 @@
 import logger from "../../logger.js";
 import utils from "../../utils.js";
 import parseTemplateString from "../templateStrings.js";
+import { fixFeatures, stripHtml } from "./special.js";
 
 function getDescription(ddb, character, feat) {
+  // for now none actions probably always want the full text
+  // const useFull = game.settings.get("ddb-importer", "character-update-policy-use-full-description");
+  const useFull = true;
   let snippet = "";
   let description = "";
 
-  if (feat.definition && feat.definition.snippet) {
-    snippet = parseTemplateString(ddb, character, feat.definition.snippet, feat);
+  if (feat.definition?.snippet) {
+    snippet = parseTemplateString(ddb, character, feat.definition.snippet, feat).text;
   } else if (feat.snippet) {
-    snippet = parseTemplateString(ddb, character, feat.snippet, feat);
+    snippet = parseTemplateString(ddb, character, feat.snippet, feat).text;
   } else {
     snippet = "";
   }
 
-  if (feat.definition && feat.definition.description) {
-    description = parseTemplateString(ddb, character, feat.definition.description, feat);
+  if (feat.definition?.description) {
+    description = parseTemplateString(ddb, character, feat.definition.description, feat).text;
   } else if (feat.description) {
-    description = parseTemplateString(ddb, character, feat.description, feat);
+    description = parseTemplateString(ddb, character, feat.description, feat).text;
   } else {
     description = "";
   }
 
+  if (stripHtml(description) === snippet) snippet = "";
+
+  const fullDescription = description !== "" ? description + (snippet !== "" ? "<h3>Summary</h3>" + snippet : "") : snippet;
+  const value = !useFull && snippet.trim() !== "" ? snippet : fullDescription;
+
   return {
-    value: description !== "" ? description + (snippet !== "" ? "<h3>Summary</h3>" + snippet : "") : snippet,
+    value: value,
     chat: snippet,
     unidentified: "",
   };
@@ -40,6 +49,7 @@ function parseFeature(feat, ddb, character, source, type) {
     flags: {
       ddbimporter: {
         id: feat.id,
+        entityTypeId: feat.entityTypeId,
         dndbeyond: {
           requiredLevel: feat.requiredLevel,
           displayOrder:
@@ -109,7 +119,10 @@ function parseClassFeatures(ddb, character) {
   ddb.character.classes.forEach((klass) => {
     const classFeatures = klass.definition.classFeatures.filter(
       (feat) =>
-        feat.name !== "Proficiencies" && feat.name !== "Ability Score Improvement" && feat.requiredLevel <= klass.level
+        feat.name !== "Proficiencies" &&
+        feat.name !== "Ability Score Improvement" &&
+        !ddb.character.actions.class.some((action) => action.name === feat.name) &&
+        feat.requiredLevel <= klass.level
     );
     const klassName = klass.definition.name;
     const klassFeatureList = classFeatures
@@ -234,6 +247,7 @@ export default function parseFeatures(ddb, character) {
   ddb.classOptions
     .filter((feat) => !ddb.character.actions.class.some((action) => action.name === feat.name))
     .forEach((feat) => {
+      logger.debug(`Parsing Optional Feature ${feat.name}`);
       const source = utils.parseSource(feat);
       let feats = parseFeature(feat, ddb, character, source, "feat");
       feats.forEach((item) => {
@@ -264,5 +278,6 @@ export default function parseFeatures(ddb, character) {
       });
     });
 
+  fixFeatures(items);
   return items;
 }

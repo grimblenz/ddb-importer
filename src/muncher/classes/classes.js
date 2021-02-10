@@ -1,5 +1,5 @@
 import logger from "../../logger.js";
-import { buildBaseClass, getClassFeature, buildClassFeatures } from "./shared.js";
+import { buildBaseClass, getClassFeature, buildClassFeatures, NO_TRAITS } from "./shared.js";
 import { getCompendiumLabel, updateCompendium, srdFiddling } from "../import.js";
 import { munchNote } from "../utils.js";
 
@@ -10,19 +10,8 @@ async function buildClass(klass, compendiumClassFeatures, compendiumLabel) {
   return result;
 }
 
-
-const NO_TRAITS = [
-  "Speed",
-  "Ability Score Increase",
-  "Ability Score Improvement",
-  "Size",
-  "Feat",
-  "Languages",
-  "Hit Points",
-  "Proficiencies",
-];
-
 export async function getClasses(data) {
+  let results = [];
   logger.debug("get clases started");
   const updateBool = game.settings.get("ddb-importer", "munching-policy-update-existing");
 
@@ -30,18 +19,19 @@ export async function getClasses(data) {
   let classFeatures = [];
 
   data.forEach((klass) => {
-    logger.debug(`${klass.fullName} feature parsing started...`);
+    logger.debug(`${klass.name} feature parsing started...`);
     klass.classFeatures.forEach((feature) => {
       const existingFeature = classFeatures.some((f) => f.name === feature.name);
       logger.debug(`${feature.name} feature starting...`);
       if (!NO_TRAITS.includes(feature.name) && !existingFeature) {
         const parsedFeature = getClassFeature(feature, klass);
         classFeatures.push(parsedFeature);
+        results.push({ class: klass.name, subClass: "", feature: feature.name });
       }
     });
   });
 
-  const fiddledClassFeatures = await srdFiddling(classFeatures, "classes");
+  const fiddledClassFeatures = await srdFiddling(classFeatures, "features");
   munchNote(`Importing ${fiddledClassFeatures.length} features!`, true);
   await updateCompendium("features", { features: fiddledClassFeatures }, updateBool);
 
@@ -67,5 +57,6 @@ export async function getClasses(data) {
 
   await updateCompendium("classes", { classes: fiddledClasses }, updateBool);
 
-  return fiddledClasses.concat(fiddledClassFeatures);
+  // return fiddledClasses.concat(fiddledClassFeatures);
+  return results;
 }

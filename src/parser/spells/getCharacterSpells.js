@@ -21,7 +21,7 @@ export function getCharacterSpells(ddb, character) {
     const abilityModifier = utils.calculateModifier(character.data.abilities[spellCastingAbility].value);
 
     const cantripBoost =
-      ddb.character.modifiers.class.filter(
+      utils.getChosenClassModifiers(ddb).filter(
         (mod) =>
           mod.type === "bonus" &&
           mod.subType === `${classInfo.definition.name.toLowerCase()}-cantrip-damage` &&
@@ -38,8 +38,9 @@ export function getCharacterSpells(ddb, character) {
             lookup: "classSpell",
             class: classInfo.definition.name,
             level: classInfo.level,
+            characterClassId: playerClass.characterClassId,
             spellLevel: spell.definition.level,
-            spellSlots: character.data.spells,
+            // spellSlots: character.data.spells,
             ability: spellCastingAbility,
             mod: abilityModifier,
             dc: 8 + proficiencyModifier + abilityModifier,
@@ -80,10 +81,14 @@ export function getCharacterSpells(ddb, character) {
     // If the spell has an ability attached, use that
     let spellCastingAbility = undefined;
     const featureId = utils.determineActualFeatureId(ddb, spell.componentId);
-    const classInfo = lookups.classFeature.find((cls) => cls.id === featureId);
+    const classInfo = lookups.classFeature.find((clsFeature) => clsFeature.id == featureId);
     // Sometimes there are spells here which don't have an class Info
     // this seems to be part of the optional tasha's rules, lets not parse for now
     // as ddb implementation is not yet finished
+    // / options.class.[].definition.id
+    if (!classInfo) {
+      logger.warn(`Unable to add ${spell.definition.name}`);
+    }
     if (!classInfo) return;
     const klass = utils.getClassFromOptionID(ddb, spell.componentId);
 
@@ -104,6 +109,7 @@ export function getCharacterSpells(ddb, character) {
     spell.flags = {
       ddbimporter: {
         dndbeyond: {
+          class: (klass) ? klass.definition.name : undefined,
           lookup: "classFeature",
           lookupName: classInfo.name,
           lookupId: classInfo.id,

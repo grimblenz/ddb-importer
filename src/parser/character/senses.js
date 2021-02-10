@@ -80,7 +80,7 @@ export function getSensesMap(data) {
       .filter((sense) => !sense.distance)
       .forEach((sense) => {
         const s = DICTIONARY.character.senses.find((s) => s.id === sense.senseId);
-        if (s) {
+        if (s && sense.distance) {
           senses[s.name.toLowerCase()] = sense.distance;
         } else {
           senses.special += `${sense.distance}; `;
@@ -88,12 +88,14 @@ export function getSensesMap(data) {
       });
   }
 
-  // Darkvision
-  utils.filterBaseModifiers(data, "set-base", "darkvision").forEach((sense) => {
-    if (sense.value > senses['darkvision']) {
-      senses['darkvision'] = sense.value;
-    }
-  });
+  // Base senses
+  for (const senseName in senses) {
+    utils.filterBaseModifiers(data, "set-base", senseName).forEach((sense) => {
+      if (sense.value > senses[senseName]) {
+        senses[senseName] = sense.value;
+      }
+    });
+  }
 
   // Devils Sight gives bright light to 120 foot instead of normal darkvision
   utils

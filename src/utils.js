@@ -3,9 +3,7 @@ import DICTIONARY from "./dictionary.js";
 import logger from "./logger.js";
 import { DDB_CONFIG } from "./ddb-config.js";
 
-// const PROXY = "https://proxy.vttassets.com/?url=";
-const PROXY = "https://i.vtta.io/dl/";
-const URL_ENCODE = true;
+var existingFiles = [];
 
 let utils = {
   debug: () => {
@@ -79,7 +77,7 @@ let utils = {
     // componentId on spells.class[0].componentId = options.class[0].definition.id
     // options.class[0].definition.componentId = classes[0].classFeatures[0].definition.id
     const option = data.character.options.class.find((option) => option.definition.id === optionId);
-    utils.log(option);
+    // utils.log(option);
     if (option) {
       const klass = data.character.classes.find((klass) =>
         klass.classFeatures.some((feature) => feature.definition.id === option.componentId)
@@ -189,9 +187,27 @@ let utils = {
       );
   },
 
+  getChosenClassModifiers: (data) => {
+    // get items we are going to interact on
+    const modifiers = data.character.modifiers.class.filter((mod) =>
+      data.character.options.class.some((option) =>
+       option.componentId == mod.componentId && option.componentTypeId == mod.componentTypeId
+      ) ||
+      data.character.choices.class.some((choice) =>
+       choice.componentId == mod.componentId && choice.componentTypeId == mod.componentTypeId
+      ) ||
+      data.character.classes.some((klass) => klass.classFeatures.some((feat) =>
+        feat.definition.id == mod.componentId && feat.definition.entityTypeId == mod.componentTypeId
+      ))
+      );
+
+    return modifiers;
+  },
+
   filterBaseModifiers: (data, type, subType = null, restriction = ["", null]) => {
     const modifiers = [
-      data.character.modifiers.class,
+      // data.character.modifiers.class,
+      utils.getChosenClassModifiers(data),
       data.character.modifiers.race,
       data.character.modifiers.background,
       data.character.modifiers.feat,
@@ -296,7 +312,7 @@ let utils = {
   },
 
   determineActualFeatureId: (data, featureId, type = "class") => {
-    const optionalFeature = data.character.optionalClassFeatures
+    const optionalFeatureReplacement = data.character.optionalClassFeatures
       .filter((f) => f.classFeatureId === featureId)
       .map((f) => f.affectedClassFeatureId);
     // are we dealing with an optional class feature?
@@ -306,11 +322,12 @@ let utils = {
       const choiceOptionalFeature = data.character.optionalClassFeatures
         .filter((f) => f.classFeatureId === choiceFeature)
         .map((f) => f.affectedClassFeatureId);
-      if (choiceOptionalFeature) {
+      if (choiceOptionalFeature && choiceOptionalFeature.length > 0) {
         return choiceOptionalFeature[0];
       }
-    } else if (optionalFeature && optionalFeature.length > 0) {
-      return optionalFeature[0];
+    } else if (optionalFeatureReplacement && optionalFeatureReplacement.length > 0) {
+      logger.debug(`Feature ${featureId} is replacing ${optionalFeatureReplacement[0]}`);
+      return optionalFeatureReplacement[0];
     }
     return featureId;
   },
@@ -318,21 +335,40 @@ let utils = {
   findClassByFeatureId: (data, featureId) => {
     // optional class features need this filter, as they replace existing features
     const featId = utils.determineActualFeatureId(data, featureId);
+    logger.debug(`Finding featureId ${featureId}`);
 
-    const cls = data.character.classes.find((cls) => {
+    let cls = data.character.classes.find((cls) => {
       let classFeatures = cls.classFeatures;
       let featureMatch = classFeatures.find((feature) => feature.definition.id === featId);
+
       if (featureMatch) {
-        return cls;
+        return true;
       } else {
         // if not in global class feature list lets dig down
         classFeatures = cls.definition.classFeatures;
         if (cls.subclassDefinition && cls.subclassDefinition.classFeatures) {
           classFeatures = classFeatures.concat(cls.subclassDefinition.classFeatures);
         }
-        return classFeatures.find((feature) => feature.id === featId) !== undefined;
+        return classFeatures.some((feature) => feature.id === featId);
       }
     });
+    // try class option lookup
+    if (!cls) {
+      const option = data.character.options.class.find((option) => option.definition.id == featureId);
+      if (option) {
+        cls = data.character.classes.find((cls) => cls.classFeatures.find((feature) => feature.definition.id == option.componentId));
+      }
+    }
+    // class option lookups
+    if (!cls && data.character.classOptions) {
+      const classOption = data.character.classOptions.find((option) => option.id == featureId);
+      if (classOption) {
+        cls = data.character.classes.find((cls) => cls.definition.id == classOption.classId);
+      }
+    }
+    if (!cls) {
+      logger.debug(`Class not found for ${featureId}`);
+    }
     return cls;
   },
 
@@ -448,13 +484,33 @@ let utils = {
     });
   },
 
+  fileExistsUpdate: (fileList) => {
+    const targetFiles = fileList.filter((f) => !existingFiles.includes(f));
+    existingFiles = existingFiles.concat(targetFiles);
+  },
+
+  generateCurrentFiles: async (directoryPath) => {
+    logger.debug(`Checking for files in ${directoryPath}...`);
+    const dir = DirectoryPicker.parse(directoryPath);
+    const fileList = await DirectoryPicker.browse(dir.activeSource, dir.current, { bucket: dir.bucket });
+    utils.fileExistsUpdate(fileList.files);
+  },
+
   fileExists: async (directoryPath, filename) => {
-    try {
-      let uri = utils.getFileUrl(directoryPath, filename);
-      logger.debug("Looking for file at " + uri);
-      await utils.serverFileExists(uri);
+    const fileUrl = await utils.getFileUrl(directoryPath, filename);
+    let existingFile = existingFiles.includes(fileUrl);
+    if (existingFile) return true;
+
+    logger.debug(`Checking for ${filename} at ${fileUrl}...`);
+    const dir = DirectoryPicker.parse(directoryPath);
+    const fileList = await DirectoryPicker.browse(dir.activeSource, dir.current, { bucket: dir.bucket });
+
+    if (fileList.files.includes(fileUrl)) {
+      logger.debug(`Found ${fileUrl}`);
+      existingFiles.push(fileUrl);
       return true;
-    } catch (ignored) {
+    } else {
+      logger.debug(`Could not find ${fileUrl}`);
       return false;
     }
   },
@@ -520,6 +576,9 @@ let utils = {
       return new Promise((resolve, reject) => {
         fetch(url, {
           method: "GET",
+          headers: {
+            "x-requested-with": "foundry"
+          },
         })
           .then((response) => {
             if (!response.ok) {
@@ -571,8 +630,10 @@ let utils = {
 
     // uploading the character avatar and token
     try {
-      const target = URL_ENCODE ? encodeURIComponent(url) : url;
-      url = useProxy ? PROXY + target : url;
+      const proxyEndpoint = game.settings.get("ddb-importer", "cors-endpoint");
+      const urlEncode = game.settings.get("ddb-importer", "cors-encode");
+      const target = urlEncode ? encodeURIComponent(url) : url;
+      url = useProxy ? proxyEndpoint + target : url;
       // console.error(`URL: ${url}`);
       let result = await process(url, targetDirectory, filename + "." + ext);
       return result;
@@ -583,27 +644,28 @@ let utils = {
     }
   },
 
+  getOrCreateFolder: async (root, entityType, folderName, folderColor = "") => {
+    let folder = game.folders.entities.find((f) =>
+      f.data.type === entityType && f.data.name === folderName &&
+      f.data.parent === (root ? root.id : null)
+    );
+    // console.warn(`Looking for ${root} ${entityType} ${folderName}`);
+    // console.warn(folder);
+    if (folder) return folder;
+    folder = await Folder.create(
+      {
+        name: folderName,
+        type: entityType,
+        color: folderColor,
+        parent: (root) ? root.id : null,
+      },
+      { displaySheet: false }
+    );
+    return folder;
+  },
+
   // eslint-disable-next-line no-unused-vars
-  getFolder: async (kind, type = "", race = "") => {
-    let getOrCreateFolder = async (root, entityType, folderName) => {
-      const baseColor = "#98020a";
-
-      let folder = game.folders.entities.find(
-        (f) => f.data.type === entityType && f.data.name === folderName && f.data.parent === root.id
-      );
-      if (folder) return folder;
-      folder = await Folder.create(
-        {
-          name: folderName,
-          type: entityType,
-          color: baseColor,
-          parent: root.id,
-        },
-        { displaySheet: false }
-      );
-      return folder;
-    };
-
+  getFolder: async (kind, subFolder = "", baseFolderName = "D&D Beyond Import", baseColor = "#6f0006", subColor = "#98020a") => {
     let entityTypes = new Map();
     entityTypes.set("spell", "Item");
     entityTypes.set("equipment", "Item");
@@ -617,33 +679,15 @@ let utils = {
     entityTypes.set("page", "JournalEntry");
     entityTypes.set("magic-items", "Item");
     entityTypes.set("magic-item-spells", "Item");
+    entityTypes.set("extras", "Actor");
 
-    let baseName = "D&D Beyond Import";
-    let baseColor = "#6f0006";
-    let folderName = game.i18n.localize(`ddb-importer.item-type.${kind}`);
-
-    let entityType = entityTypes.get(kind);
-
-    // get base folder, or create it if it does not exist
-    let baseFolder = game.folders.entities.find(
-      (folder) => folder.data.type === entityType && folder.data.name === baseName
-    );
-    if (!baseFolder) {
-      baseFolder = await Folder.create(
-        {
-          name: baseName,
-          type: entityType,
-          color: baseColor,
-          parent: null,
-          sort: 30000,
-        },
-        { displaySheet: false }
-      );
-    }
-
-    let entityFolder = await getOrCreateFolder(baseFolder, entityType, folderName);
-    if (kind === "npc" && type !== "") {
-      let typeFolder = await getOrCreateFolder(entityFolder, "Actor", type.charAt(0).toUpperCase() + type.slice(1));
+    const folderName = game.i18n.localize(`ddb-importer.item-type.${kind}`);
+    const entityType = entityTypes.get(kind);
+    const baseFolder = await utils.getOrCreateFolder(null, entityType, baseFolderName, baseColor);
+    const entityFolder = await utils.getOrCreateFolder(baseFolder, entityType, folderName, subColor);
+    if (subFolder !== "") {
+      const subFolderName = subFolder.charAt(0).toUpperCase() + subFolder.slice(1);
+      const typeFolder = await utils.getOrCreateFolder(entityFolder, entityType, subFolderName, subColor);
       return typeFolder;
     } else {
       return entityFolder;
@@ -827,13 +871,17 @@ let utils = {
       }
   },
 
-  getFileUrl: (directoryPath, filename) => {
+  getFileUrl: async (directoryPath, filename) => {
     let uri;
     try {
       let dir = DirectoryPicker.parse(directoryPath);
       if (dir.activeSource == "data") {
         // Local on-server file system
         uri = dir.current + "/" + filename;
+      } else if (dir.activeSource == "forgevtt") {
+        const status = ForgeAPI.lastStatus || await ForgeAPI.status();
+        const userId = status.user;
+        uri = "https://assets.forge-vtt.com/" + userId + "/" + dir.current + "/" + filename;
       } else {
         // S3 Bucket
         uri =

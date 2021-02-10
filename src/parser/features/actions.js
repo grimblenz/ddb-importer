@@ -1,6 +1,8 @@
 import DICTIONARY from "../../dictionary.js";
+import logger from "../../logger.js";
 import utils from "../../utils.js";
 import parseTemplateString from "../templateStrings.js";
+import { fixFeatures, stripHtml } from "./special.js";
 
 // get actions from ddb.character.customActions
 function getCustomActions(ddb, displayedAsAttack) {
@@ -43,7 +45,7 @@ function getDamage(action) {
     ? DICTIONARY.actions.damageType.find((type) => type.id === action.damageTypeId).name
     : null;
   const modBonus = (action.statId || action.abilityModifierStatId) && !action.isOffhand ? " + @mod" : "";
-  const fixedBonus = action.dice.fixedValue ? ` + ${action.dice.fixedValue}` : "";
+  const fixedBonus = action.dice?.fixedValue ? ` + ${action.dice.fixedValue}` : "";
 
   if (action.dice) {
     if (action.dice.diceString) {
@@ -60,6 +62,50 @@ function getDamage(action) {
   }
 
   return damage;
+}
+
+/**
+ * Some features have actions that use dice and mods that are defined on the character class feature
+ * this attempts to parse out the damage dice and any ability modifier.
+ * This relies on the parsing of templateStrings for the ability modifier detection.
+ * @param {*} ddb
+ * @param {*} character
+ * @param {*} action
+ * @param {*} feat
+ */
+function getLevelScaleDice(ddb, character, action, feat) {
+  let parts = ddb.character.classes
+    .filter((cls) => cls.classFeatures.some((feature) =>
+      feature.definition.id == action.componentId &&
+      feature.definition.entityTypeId == action.componentTypeId &&
+      feature.levelScale?.dice?.diceString
+    ))
+    .map((cls) => {
+      const feature = cls.classFeatures.find((feature) =>
+        feature.definition.id == action.componentId &&
+        feature.definition.entityTypeId == action.componentTypeId
+      );
+      const parsedString = character.flags.ddbimporter.dndbeyond.templateStrings.find((templateString) =>
+        templateString.id == action.id &&
+        templateString.entityTypeId == action.entityTypeId
+      );
+      let part = feature.levelScale.dice.diceString;
+      if (parsedString) {
+        const modifier = parsedString.definitions.find((definition) => definition.type === "modifier");
+        if (modifier) {
+          feat.data.ability = modifier.subType;
+          part = `${part} + @mod`;
+        }
+      }
+      return [part, ""];
+    });
+
+  feat.data.damage = {
+    parts: parts,
+    versatile: "",
+  };
+
+  return feat;
 }
 
 function martialArtsDamage(ddb, action) {
@@ -121,7 +167,7 @@ function getLimitedUse(action, character) {
     } else if (action.limitedUse.useProficiencyBonus) {
       const multiplier = action.limitedUse.proficiencyBonusOperator ? action.limitedUse.proficiencyBonusOperator : 1;
       if (action.limitedUse.operator === 1) {
-        maxUses = character.data.attributes.prof * multiplier;
+        maxUses = (character.data.attributes.prof * multiplier) + action.limitedUse.maxUses;
       } else {
         maxUses = character.data.attributes.prof;
       }
@@ -130,7 +176,7 @@ function getLimitedUse(action, character) {
     }
     return {
       value: maxUses - action.limitedUse.numberUsed,
-      max: maxUses,
+      max: (maxUses) ? parseInt(maxUses) : null,
       per: resetType ? resetType.value : "",
     };
   } else {
@@ -139,10 +185,14 @@ function getLimitedUse(action, character) {
 }
 
 function getDescription(ddb, character, action) {
-  const snippet = action.snippet ? parseTemplateString(ddb, character, action.snippet, action) : "";
-  const description = action.description ? parseTemplateString(ddb, character, action.description, action) : "";
+  const useFull = game.settings.get("ddb-importer", "character-update-policy-use-full-description");
+  let snippet = action.snippet ? parseTemplateString(ddb, character, action.snippet, action).text : "";
+  const description = action.description ? parseTemplateString(ddb, character, action.description, action).text : "";
+  if (stripHtml(description) === snippet) snippet = "";
+  const fullDescription = description !== "" ? description + (snippet !== "" ? "<h3>Summary</h3>" + snippet : "") : snippet;
+  const value = !useFull && snippet.trim() !== "" ? snippet : fullDescription;
   return {
-    value: description !== "" ? description + (snippet !== "" ? "<h3>Summary</h3>" + snippet : "") : snippet,
+    value: value,
     chat: snippet,
     unidentified: "",
   };
@@ -164,7 +214,11 @@ function getActivation(action) {
 }
 
 function getResource(character, action) {
-  let consume = null;
+  let consume = {
+    "type": "",
+    "target": "",
+    "amount": null
+  };
   Object.keys(character.data.resources).forEach((resource) => {
     const detail = character.data.resources[resource];
     if (action.name === detail.label) {
@@ -186,10 +240,10 @@ function getWeaponType(action) {
 
 function calculateRange(action, weapon) {
   if (action.range && action.range.aoeType && action.range.aoeSize) {
-    weapon.data.range = { value: null, units: "self", long: null };
+    weapon.data.range = { value: null, units: "self", long: "" };
     weapon.data.target = {
       value: action.range.aoeSize,
-      type: DICTIONARY.actions.aoeType.find((type) => type.id === action.range.aoeType).value,
+      type: DICTIONARY.actions.aoeType.find((type) => type.id === action.range.aoeType)?.value,
       units: "ft",
     };
   } else if (action.range && action.range.range) {
@@ -205,46 +259,49 @@ function calculateRange(action, weapon) {
 }
 
 function calculateSaveAttack(action, weapon) {
-  const damageType = DICTIONARY.actions.damageType.find((type) => type.id === action.damageTypeId).name;
   weapon.data.actionType = "save";
-  weapon.data.damage = {
-    parts: [[action.dice.diceString, damageType]],
-    versatile: "",
-  };
+  weapon.data.damage = getDamage(action);
 
   const fixedDC = (action.fixedSaveDc) ? action.fixedSaveDc : null;
   const scaling = (fixedDC) ? fixedDC : (action.abilityModifierStatId) ? DICTIONARY.character.abilities.find((stat) => stat.id === action.abilityModifierStatId).value : "spell";
 
+  const saveAbility = (action.saveStatId)
+    ? DICTIONARY.character.abilities.find((stat) => stat.id === action.saveStatId).value
+    : "";
 
   weapon.data.save = {
-    ability: DICTIONARY.character.abilities.find((stat) => stat.id === action.saveStatId).value,
+    ability: saveAbility,
     dc: fixedDC,
     scaling: scaling,
   };
-  weapon.data.ability = DICTIONARY.character.abilities.find((stat) => stat.id === action.abilityModifierStatId).value;
+  if (action.abilityModifierStatId) {
+    weapon.data.ability = DICTIONARY.character.abilities.find((stat) => stat.id === action.abilityModifierStatId).value;
+  }
   return weapon;
 }
 
-function calculateActionTypeOne(ddb, character, action, weapon) {
-  weapon.data.actionType = "mwak";
 
-  if (action.isMartialArts) {
+function calculateActionAttackAbilities(ddb, character, action, weapon) {
+  let defaultAbility;
+
+  if (action.abilityModifierStatId && !([1, 2].includes(action.abilityModifierStatId) && action.isMartialArts)) {
+    defaultAbility = DICTIONARY.character.abilities.find(
+      (stat) => stat.id === action.abilityModifierStatId
+    ).value;
+    weapon.data.ability = defaultAbility;
+  } else if (action.isMartialArts) {
     weapon.data.ability =
       action.isMartialArts && isMartialArtists(ddb.character.classes)
         ? character.data.abilities.dex.value >= character.data.abilities.str.value
           ? "dex"
           : "str"
         : "str";
+  } else {
+    weapon.data.ability = "";
+  }
+  if (action.isMartialArts) {
     weapon.data.damage = martialArtsDamage(ddb, action);
   } else {
-    // type 3
-    if (action.abilityModifierStatId) {
-      weapon.data.ability = DICTIONARY.character.abilities.find(
-        (stat) => stat.id === action.abilityModifierStatId
-      ).value;
-    } else {
-      weapon.data.ability = "";
-    }
     weapon.data.damage = getDamage(action);
   }
   return weapon;
@@ -255,7 +312,8 @@ function getAttackType(ddb, character, action, weapon) {
   if (action.saveStatId) {
     weapon = calculateSaveAttack(action, weapon);
   } else if (action.actionType === 1) {
-    weapon = calculateActionTypeOne(ddb, character, action, weapon);
+    weapon.data.actionType = "mwak";
+    weapon = calculateActionAttackAbilities(ddb, character, action, weapon);
   } else {
     if (action.rangeId && action.rangeId === 1) {
       weapon.data.actionType = "mwak";
@@ -264,25 +322,7 @@ function getAttackType(ddb, character, action, weapon) {
     } else {
       weapon.data.actionType = "other";
     }
-
-    if (action.isMartialArts) {
-      weapon.data.ability =
-        action.isMartialArts && isMartialArtists(ddb.character.classes)
-          ? character.data.abilities.dex.value >= character.data.abilities.str.value
-            ? "dex"
-            : "str"
-          : "str";
-      weapon.data.damage = martialArtsDamage(ddb, action);
-    } else {
-      if (action.abilityModifierStatId) {
-        weapon.data.ability = DICTIONARY.character.abilities.find(
-          (stat) => stat.id === action.abilityModifierStatId
-        ).value;
-      } else {
-        weapon.data.ability = "";
-      }
-      weapon.data.damage = getDamage(action);
-    }
+    weapon = calculateActionAttackAbilities(ddb, character, action, weapon);
   }
   return weapon;
 }
@@ -295,9 +335,14 @@ function getAttackAction(ddb, character, action) {
     flags: {
       ddbimporter: {
         id: action.id,
+        entityTypeId: action.entityTypeId,
+        action: true,
+        componentId: action.componentId,
+        componentTypeId: action.componentTypeId,
       }
     },
   };
+  logger.debug(`Getting Attack Action ${action.name}`);
 
   try {
     if (action.isMartialArts) {
@@ -317,6 +362,21 @@ function getAttackAction(ddb, character, action) {
     weapon.data.weaponType = getWeaponType(action);
     weapon.data.uses = getLimitedUse(action, character);
     weapon.data.consume = getResource(character, action);
+
+    if (weapon.data.uses?.max) {
+      weapon.flags.betterRolls5e = {
+        "quickCharges": {
+          "value": {
+            "use": true,
+            "resource": true
+          },
+          "altValue": {
+            "use": true,
+            "resource": true
+          }
+        }
+      };
+    }
   } catch (err) {
     utils.log(
       `Unable to Import Attack Action: ${action.name}, please log a bug report. Err: ${err.message}`,
@@ -407,6 +467,7 @@ function getOtherActions(ddb, character, items) {
         (action.displayAsAttack === true && !items.some((attack) => attack.name === action.name))
     )
     .map((action) => {
+      logger.debug(`Getting Other Action ${action.name}`);
       let feat = {
         name: action.name,
         type: "feat",
@@ -414,6 +475,9 @@ function getOtherActions(ddb, character, items) {
         flags: {
           ddbimporter: {
             id: action.id,
+            entityTypeId: action.entityTypeId,
+            componentId: action.componentId,
+            componentTypeId: action.componentTypeId,
           }
         },
       };
@@ -421,6 +485,29 @@ function getOtherActions(ddb, character, items) {
       feat.data.description = getDescription(ddb, character, action);
       feat.data.uses = getLimitedUse(action, character);
       feat.data.consume = getResource(character, action);
+
+      feat = calculateRange(action, feat);
+      feat = getAttackType(ddb, character, action, feat);
+
+      if (feat.data.uses?.max) {
+        feat.flags.betterRolls5e = {
+          quickCharges: {
+            value: {
+              use: true,
+              resource: true
+            },
+            altValue: {
+              use: true,
+              resource: true
+            }
+          }
+        };
+      }
+
+      if (!feat.data.damage?.parts) {
+        logger.debug("Running level scale parser");
+        feat = getLevelScaleDice(ddb, character, action, feat);
+      }
 
       return feat;
     });
@@ -465,5 +552,6 @@ export default function parseActions(ddb, character) {
     }
   });
 
+  fixFeatures(actions);
   return actions;
 }

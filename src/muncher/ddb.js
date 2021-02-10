@@ -5,21 +5,75 @@ import { parseItems } from "./items.js";
 import { parseSpells } from "./spells.js";
 import { parseCritters } from "./monsters.js";
 import { parseRaces } from "./races.js";
+import { parseFeats } from "./feats.js";
 import { parseClasses } from "./classes.js";
 import { getPatreonTiers, munchNote } from "./utils.js";
+import { DDB_CONFIG } from "../ddb-config.js";
 
+function getSourcesLookups(selected) {
+  const selections = DDB_CONFIG.sources
+  .filter((source) => source.isReleased)
+  .map((source) => {
+    const details = {
+      id: source.id,
+      acronym: source.name,
+      label: source.description,
+      selected: selected.includes(source.id),
+    };
+    return details;
+  });
+
+  return selections;
+}
+
+export class DDBSources extends FormApplication {
+  static get defaultOptions() {
+    const options = super.defaultOptions;
+    options.id = "ddb-importer-sources";
+    options.template = "modules/ddb-importer/handlebars/sources.handlebars";
+    options.width = 500;
+    return options;
+  }
+
+  get title() { // eslint-disable-line class-methods-use-this
+    // improve localisation
+    // game.i18n.localize("")
+    return "Monster Muncher Sauce Selection";
+  }
+
+  /** @override */
+  async getData() { // eslint-disable-line class-methods-use-this
+    const existingSelection = game.settings.get("ddb-importer", "munching-policy-monster-sources").flat();
+    const sources = getSourcesLookups(existingSelection);
+
+    return {
+      sources: sources,
+    };
+  }
+
+  /** @override */
+  // eslint-disable-next-line no-unused-vars
+  async _updateObject(event, formData) { // eslint-disable-line class-methods-use-this
+    event.preventDefault();
+    let sources = [];
+    for (const [key, value] of Object.entries(formData)) {
+      if (value) sources.push(parseInt(key));
+    }
+    await game.settings.set("ddb-importer", "munching-policy-monster-sources", sources);
+  }
+}
 
 export default class DDBMuncher extends Application {
   static get defaultOptions() {
     const options = super.defaultOptions;
     options.id = "ddb-importer-monsters";
     options.template = "modules/ddb-importer/handlebars/munch.handlebars";
-    options.classes.push("ddb-muncher");
     options.resizable = false;
     options.height = "auto";
-    options.width = 550;
-    options.minimizable = true;
+    options.width = 600;
     options.title = "MrPrimate's Muncher";
+    options.classes = ["ddb-muncher", "sheet"];
+    options.tabs = [{ navSelector: ".tabs", contentSelector: "form", initial: "settings" }];
     return options;
   }
 
@@ -30,6 +84,10 @@ export default class DDBMuncher extends Application {
       $('button[id^="munch-"]').prop('disabled', true);
       DDBMuncher.parseCritters();
     });
+    html.find("#munch-source-select").click(async () => {
+      DDBMuncher.selectSources();
+    });
+
     html.find("#munch-spells-start").click(async () => {
       munchNote(`Downloading spells...`, true);
       $('button[id^="munch-"]').prop('disabled', true);
@@ -44,6 +102,11 @@ export default class DDBMuncher extends Application {
       munchNote(`Downloading races...`, true);
       $('button[id^="munch-"]').prop('disabled', true);
       DDBMuncher.parseRaces();
+    });
+    html.find("#munch-feats-start").click(async () => {
+      munchNote(`Downloading feats...`, true);
+      $('button[id^="munch-"]').prop('disabled', true);
+      DDBMuncher.parseFeats();
     });
     html.find("#munch-classes-start").click(async () => {
       munchNote(`Downloading classes...`, true);
@@ -113,9 +176,11 @@ export default class DDBMuncher extends Application {
     if (cobalt && betaKey) {
       $('button[id^="munch-monsters-start"]').prop('disabled', false);
     }
-    if (cobalt && tier === "GOD") {
+    if (cobalt && (tier === "GOD" || tier === "UNDYING")) {
       $('button[id^="munch-races-start"]').prop('disabled', false);
+      $('button[id^="munch-feats-start"]').prop('disabled', false);
       $('button[id^="munch-classes-start"]').prop('disabled', false);
+      $('button[id^="munch-source-select"]').prop('disabled', false);
     }
   }
 
@@ -172,6 +237,20 @@ export default class DDBMuncher extends Application {
     }
   }
 
+  static async parseFeats() {
+    try {
+      logger.info("Munching feats!");
+      const result = await parseFeats();
+      munchNote(`Finished importing ${result.length} feats!`, true);
+      munchNote("");
+      DDBMuncher.enableButtons();
+    } catch (error) {
+      logger.error(error);
+      logger.error(error.stack);
+    }
+  }
+
+
   static async parseClasses() {
     try {
       logger.info("Munching classes!");
@@ -185,14 +264,18 @@ export default class DDBMuncher extends Application {
     }
   }
 
+  static async selectSources() {
+    new DDBSources().render(true);
+  }
+
 
   getData() { // eslint-disable-line class-methods-use-this
     const cobalt = game.settings.get("ddb-importer", "cobalt-cookie") != "";
     const betaKey = game.settings.get("ddb-importer", "beta-key") != "";
-    // const daeInstalled = utils.isModuleInstalledAndActive('dae') && utils.isModuleInstalledAndActive('Dynamic-Effects-SRD');
     const iconizerInstalled = utils.isModuleInstalledAndActive("vtta-iconizer");
     const tier = game.settings.get("ddb-importer", "patreon-tier");
     const tiers = getPatreonTiers(tier);
+    const daeInstalled = utils.isModuleInstalledAndActive("dae") && utils.isModuleInstalledAndActive("Dynamic-Effects-SRD");
 
     const itemConfig = [
       {
@@ -238,9 +321,21 @@ export default class DDBMuncher extends Application {
         enabled: true,
       },
       {
+        name: "dae-copy",
+        isChecked: game.settings.get("ddb-importer", "munching-policy-dae-copy"),
+        description: "Use Dynamic Active Effects Compendiums for matching items/features (requires DAE and SRD module).",
+        enabled: daeInstalled,
+      },
+      {
         name: "monster-homebrew",
         isChecked: game.settings.get("ddb-importer", "munching-policy-monster-homebrew"),
         description: (tiers.homebrew) ? "Include homebrew?" : "Include homebrew? [Undying or God tier patreon supporters]",
+        enabled: tiers.homebrew,
+      },
+      {
+        name: "monster-exact-match",
+        isChecked: game.settings.get("ddb-importer", "munching-policy-monster-exact-match"),
+        description: (tiers.homebrew) ? "Exact name match? (case insensitive)" : "Exact name match? [Undying or God tier patreon supporters]",
         enabled: tiers.homebrew,
       },
     ];
@@ -256,6 +351,12 @@ export default class DDBMuncher extends Application {
         name: "use-srd",
         isChecked: game.settings.get("ddb-importer", "munching-policy-use-srd"),
         description: "Use SRD compendium things instead of importing.",
+        enabled: true,
+      },
+      {
+        name: "use-inbuilt-icons",
+        isChecked: game.settings.get("ddb-importer", "munching-policy-use-inbuilt-icons"),
+        description: "Use icons from the inbuilt dictionary. (High coverage of items, feats, and spells).",
         enabled: true,
       },
       {
@@ -282,12 +383,12 @@ export default class DDBMuncher extends Application {
         description: "Use D&D Beyond remote images (a lot quicker)",
         enabled: true,
       },
-      // {
-      //   name: "dae-copy",
-      //   isChecked: game.settings.get("ddb-importer", "munching-policy-dae-copy"),
-      //   description: "Copy Dynamic Active Effects (requires DAE and SRD module)",
-      //   enabled: daeInstalled,
-      // },
+      {
+        name: "use-dae-effects",
+        isChecked: game.settings.get("ddb-importer", "munching-policy-use-dae-effects"),
+        description: "Copy effects from DAE (items and spells only). (Requires DAE and SRD module)",
+        enabled: daeInstalled,
+      },
     ];
 
     return {

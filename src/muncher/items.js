@@ -1,5 +1,5 @@
 // Main module class
-import { updateCompendium, srdFiddling, addMagicItemSpells } from "./import.js";
+import { updateCompendium, srdFiddling, daeFiddling } from "./import.js";
 import { munchNote, getCampaignId, download } from "./utils.js";
 import getInventory from "../parser/inventory/index.js";
 import utils from "../utils.js";
@@ -77,6 +77,7 @@ function getItemData() {
   const betaKey = game.settings.get("ddb-importer", "beta-key");
   const body = { cobalt: cobaltCookie, campaignId: campaignId, betaKey: betaKey };
   const debugJson = game.settings.get("ddb-importer", "debug-json");
+  const sources = game.settings.get("ddb-importer", "munching-policy-monster-sources").flat();
 
   return new Promise((resolve, reject) => {
     fetch(`${parsingApi}/proxy/items`, {
@@ -97,17 +98,44 @@ function getItemData() {
         }
         return data;
       })
-      .then((data) => getCharacterInventory(data.data))
+      .then((data) => {
+        if (sources.length == 0) return data.data;
+        return data.data.filter((item) =>
+          item.sources.some((source) => sources.includes(source.sourceId))
+        );
+      })
+      .then((data) => getCharacterInventory(data))
       .then((items) => generateImportItems(items))
       .then((data) => resolve(data))
       .catch((error) => reject(error));
   });
 }
 
+export async function addMagicItemSpells(items, spells, updateBool) {
+  if (spells.length === 0) return;
+  const itemSpells = await updateCompendium("itemspells", { itemspells: spells }, updateBool);
+  // scan the inventory for each item with spells and copy the imported data over
+  items.forEach((item) => {
+    if (item.flags.magicitems.spells) {
+      for (let [i, spell] of Object.entries(item.flags.magicitems.spells)) {
+        const itemSpell = itemSpells.find((item) => item.name === spell.name);
+        if (itemSpell) {
+          for (const [key, value] of Object.entries(itemSpell)) {
+            item.flags.magicitems.spells[i][key] = value;
+          }
+        }
+      }
+    }
+  });
+}
+
 export async function parseItems() {
   const updateBool = game.settings.get("ddb-importer", "munching-policy-update-existing");
   const magicItemsInstalled = !!game.modules.get("magicitems");
+  const uploadDirectory = game.settings.get("ddb-importer", "image-upload-directory").replace(/^\/|\/$/g, "");
 
+  // to speed up file checking we pregenerate existing files now.
+  await utils.generateCurrentFiles(uploadDirectory);
   const results = await getItemData();
   let items = results.items;
 
@@ -117,12 +145,14 @@ export async function parseItems() {
 
   // store all spells in the folder specific for Dynamic Items
   if (magicItemsInstalled && itemSpells && Array.isArray(itemSpells)) {
-    await addMagicItemSpells(itemSpells);
+    await addMagicItemSpells(items, itemSpells, updateBool);
   }
 
-  const finalItems = await srdFiddling(items, "inventory");
+  const srdItems = await srdFiddling(items, "inventory");
+  const finalItems = await daeFiddling(srdItems);
+
   const finalCount = finalItems.length;
-  munchNote(`Please be patient importing ${finalCount} items!`, true);
+  munchNote(`Importing ${finalCount} items!`, true);
 
   return new Promise((resolve) => {
     resolve(updateCompendium("inventory", { inventory: finalItems }, updateBool));

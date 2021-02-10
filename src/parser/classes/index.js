@@ -34,7 +34,9 @@ export default function parseClasses(ddb) {
       data: JSON.parse(utils.getTemplate('class')),
       flags: {
         ddbimporter: {
-          id: characterClass.definition.id,
+          id: characterClass.id,
+          definitionId: characterClass.definition.id,
+          entityTypeId: characterClass.entityTypeId,
         },
       },
     };
@@ -81,7 +83,7 @@ export default function parseClasses(ddb) {
       : []);
 
     // const classSkillSubType = `choose-a-${characterClass.definition.name.toLowerCase()}-skill`;
-    // const skillIds = ddb.character.modifiers.class
+    // const skillIds = utils.getChosenClassModifiers(ddb)
     //   .filter((mod) => mod.subType === classSkillSubType && mod.type === "proficiency")
     //   .map((mod) => mod.componentId);
 
@@ -96,6 +98,7 @@ export default function parseClasses(ddb) {
       choice.type === 2
     ).forEach((choice) => {
       const option = choice.options.find((option) => option.id === choice.optionValue);
+      if (!option) return;
       const smallChosen = DICTIONARY.character.skills.find((skill) => skill.label === option.label);
       if (smallChosen && !skillsChosen.includes(smallChosen.name)) {
         skillsChosen.push(smallChosen.name);

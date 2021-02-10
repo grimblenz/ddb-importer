@@ -1,9 +1,10 @@
 // Main module class
-import { srdFiddling, getCompendiumItems, removeItems, getSRDIconLibrary, copySRDIcons } from "./import.js";
+import { srdFiddling, getCompendiumItems, removeItems } from "./import.js";
 import { munchNote, download } from "./utils.js";
 import logger from "../logger.js";
-import { addNPC } from "./importMonster.js";
+import { addNPC, generateIconMap, copyExistingMonsterImages } from "./importMonster.js";
 import { parseMonsters } from "./monster/monster.js";
+import utils from "../utils.js";
 
 async function getMonsterData() {
   const cobaltCookie = game.settings.get("ddb-importer", "cobalt-cookie");
@@ -12,7 +13,17 @@ async function getMonsterData() {
   const searchTerm = $("#monster-munch-filter")[0].value;
   const debugJson = game.settings.get("ddb-importer", "debug-json");
   const homebrew = game.settings.get("ddb-importer", "munching-policy-monster-homebrew");
-  const body = { cobalt: cobaltCookie, betaKey: betaKey, search: searchTerm, homebrew: homebrew, searchTerm: searchTerm };
+  const exactMatch = game.settings.get("ddb-importer", "munching-policy-monster-exact-match");
+  const sources = game.settings.get("ddb-importer", "munching-policy-monster-sources").flat();
+  const body = {
+    cobalt: cobaltCookie,
+    betaKey: betaKey,
+    search: searchTerm,
+    homebrew: homebrew,
+    searchTerm: encodeURIComponent(searchTerm),
+    exactMatch: exactMatch,
+    sources: sources,
+  };
 
   return new Promise((resolve, reject) => {
     fetch(`${parsingApi}/proxy/monster`, {
@@ -41,55 +52,27 @@ async function getMonsterData() {
         return parsedMonsters;
       })
       .then((data) => {
-
-        munchNote(`Parsed ${data.actors.length} monsters, failed ${data.failedMonsterNames.length} monsters`, false, true);
-        if (data.failedMonsterNames && data.failedMonsterNames.length !== 0) logger.error(`Failed to parse ${data.failedMonsterNames}`);
+        munchNote(
+          `Parsed ${data.actors.length} monsters, failed ${data.failedMonsterNames.length} monsters`,
+          false,
+          true
+        );
+        if (data.failedMonsterNames && data.failedMonsterNames.length !== 0)
+          logger.error(`Failed to parse ${data.failedMonsterNames}`);
         resolve(data.actors);
       })
       .catch((error) => reject(error));
   });
 }
 
-async function generateIconMap(monsters) {
-  let promises = [];
-
-  const srdIcons = game.settings.get("ddb-importer", "munching-policy-use-srd-icons");
-  // eslint-disable-next-line require-atomic-updates
-  if (srdIcons) {
-    const srdIconLibrary = await getSRDIconLibrary();
-    munchNote(`Updating SRD Icons`, true);
-    let itemMap = [];
-
-    monsters.forEach((monster) => {
-      munchNote(`Processing ${monster.name}`);
-      promises.push(
-        copySRDIcons(monster.items, srdIconLibrary, itemMap).then((items) => {
-          monster.items = items;
-        })
-      );
-    });
-  }
-
-  return Promise.all(promises);
-}
-
-function copyExistingMonsterImages(monsters, existingMonsters) {
-  const updated = monsters.map((monster) => {
-    const existing = existingMonsters.find((m) => monster.name === m.name);
-    if (existing) {
-      monster.img = existing.img;
-      monster.token.img = existing.token.img;
-      return monster;
-    } else {
-      return monster;
-    }
-  });
-  return updated;
-}
-
 export async function parseCritters() {
   const updateBool = game.settings.get("ddb-importer", "munching-policy-update-existing");
   const updateImages = game.settings.get("ddb-importer", "munching-policy-update-images");
+  const uploadDirectory = game.settings.get("ddb-importer", "image-upload-directory").replace(/^\/|\/$/g, "");
+
+  // to speed up file checking we pregenerate existing files now.
+  await utils.generateCurrentFiles(uploadDirectory);
+
   let monsters = await getMonsterData();
 
   if (!updateBool || !updateImages) {

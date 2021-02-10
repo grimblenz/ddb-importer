@@ -11,7 +11,7 @@ let isHalfProficiencyRoundedUp = (data, skill) => {
 
 let getSkillProficiency = (data, skill) => {
   const modifiers = [
-    data.character.modifiers.class,
+    utils.getChosenClassModifiers(data),
     data.character.modifiers.race,
     utils.getActiveItemModifiers(data),
     data.character.modifiers.feat,
@@ -22,7 +22,7 @@ let getSkillProficiency = (data, skill) => {
     .map((mod) => mod.type);
 
   const halfProficiency =
-    data.character.modifiers.class.find(
+    utils.getChosenClassModifiers(data).find(
       (modifier) =>
         // Jack of All trades/half-rounded down
         (modifier.type === "half-proficiency" && modifier.subType === "ability-checks") ||
@@ -71,13 +71,13 @@ let getCustomSkillBonus = (data, skill) => {
       (value) => (value.typeId == 24 || value.typeId == 25) && value.valueId == skill.valueId
     ).reduce((total, bonus) => {
       return total + bonus.value;
-}, 0);
+    }, 0);
 
     if (customBonus) {
       return customBonus;
     }
   }
-  return undefined;
+  return 0;
 };
 
 
@@ -99,11 +99,11 @@ export function getSkills(data, character) {
     const skillModifierBonus = utils
       .filterBaseModifiers(data, "bonus", skill.subType)
       .map((skl) => skl.value)
-      .reduce((a, b) => a + b, 0);
+      .reduce((a, b) => a + b, 0) || 0;
     const customSkillBonus = getCustomSkillBonus(data, skill);
     const skillBonus = skillModifierBonus + customSkillBonus;
 
-    if (skillBonus) {
+    if (skillBonus && skillBonus > 0) {
       character.flags['skill-customization-5e'][skill.name] = {
         "skill-bonus": skillBonus
       };

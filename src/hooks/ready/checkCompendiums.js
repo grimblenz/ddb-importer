@@ -35,10 +35,12 @@ export default async function () {
   if (autoCreate) {
     let results = await Promise.allSettled([
       createIfNotExists("entity-spell-compendium", "Item", "Spells"),
+      // createIfNotExists("entity-item-spell-compendium", "Item", "Magic Item Spells"),
       createIfNotExists("entity-item-compendium", "Item", "Items"),
       createIfNotExists("entity-feature-compendium", "Item", "Class Features"),
       createIfNotExists("entity-class-compendium", "Item", "Classes"),
       createIfNotExists("entity-trait-compendium", "Item", "Racial Traits"),
+      createIfNotExists("entity-feat-compendium", "Item", "Feats"),
       createIfNotExists("entity-race-compendium", "Item", "Races"),
       createIfNotExists("entity-monster-compendium", "Actor", "Monsters"),
       // createIfNotExists("entity-monster-feature-compendium", "Item", "Monster Features")

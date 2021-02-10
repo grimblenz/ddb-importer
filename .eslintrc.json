@@ -28,10 +28,13 @@
     "ui": true,
     "canvas": true,
     "DAE": true,
-    "FormApplication": true
+    "FormApplication": true,
+    "setProperty": true,
+    "ForgeAPI": true,
+    "ROUTE_PREFIX": true
   },
   "parserOptions": {
-    "ecmaVersion": 2018,
+    "ecmaVersion": 2020,
     "sourceType": "module"
   },
   "rules": {

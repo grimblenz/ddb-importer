@@ -1,7 +1,8 @@
 // Main module class
-import { updateCompendium, srdFiddling } from "./import.js";
+import { updateCompendium, srdFiddling, daeFiddling } from "./import.js";
 import { munchNote, getCampaignId, download } from "./utils.js";
 import { getSpells } from "../parser/spells/getGenericSpells.js";
+import utils from "../utils.js";
 
 function getSpellData(className) {
   const cobaltCookie = game.settings.get("ddb-importer", "cobalt-cookie");
@@ -10,6 +11,7 @@ function getSpellData(className) {
   const betaKey = game.settings.get("ddb-importer", "beta-key");
   const body = { cobalt: cobaltCookie, campaignId: campaignId, betaKey: betaKey, className: className };
   const debugJson = game.settings.get("ddb-importer", "debug-json");
+  const sources = game.settings.get("ddb-importer", "munching-policy-monster-sources").flat();
 
   return new Promise((resolve, reject) => {
     fetch(`${parsingApi}/proxy/class/spells`, {
@@ -30,7 +32,13 @@ function getSpellData(className) {
         }
         return data;
       })
-      .then((data) => getSpells(data.data))
+      .then((data) => {
+        if (sources.length == 0) return data.data;
+        return data.data.filter((spell) =>
+          spell.definition.sources.some((source) => sources.includes(source.sourceId))
+        );
+      })
+      .then((data) => getSpells(data))
       .then((data) => resolve(data))
       .catch((error) => reject(error));
     });
@@ -38,6 +46,10 @@ function getSpellData(className) {
 
 export async function parseSpells() {
   const updateBool = game.settings.get("ddb-importer", "munching-policy-update-existing");
+  const uploadDirectory = game.settings.get("ddb-importer", "image-upload-directory").replace(/^\/|\/$/g, "");
+
+  // to speed up file checking we pregenerate existing files now.
+  await utils.generateCurrentFiles(uploadDirectory);
 
   const results = await Promise.allSettled([
     getSpellData("Cleric"),
@@ -58,7 +70,8 @@ export async function parseSpells() {
     return spell;
   });
   let uniqueSpells = spells.filter((v, i, a) => a.findIndex((t) => t.name === v.name) === i);
-  const finalSpells = await srdFiddling(uniqueSpells, "spells");
+  const srdSpells = await srdFiddling(uniqueSpells, "spells");
+  const finalSpells = await daeFiddling(srdSpells);
 
   const finalCount = finalSpells.length;
   munchNote(`Importing ${finalCount} spells...`, true);

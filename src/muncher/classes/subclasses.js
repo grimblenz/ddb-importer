@@ -1,19 +1,9 @@
 import logger from "../../logger.js";
+import { DDB_CONFIG } from "../../ddb-config.js";
 
-import { buildBaseClass, getClassFeature, buildClassFeatures } from "./shared.js";
+import { buildBaseClass, getClassFeature, buildClassFeatures, NO_TRAITS } from "./shared.js";
 import { getCompendiumLabel, updateCompendium, srdFiddling, getImagePath } from "../import.js";
 import { munchNote } from "../utils.js";
-
-const NO_TRAITS = [
-  "Speed",
-  "Ability Score Increase",
-  "Ability Score Improvement",
-  "Size",
-  "Feat",
-  "Languages",
-  "Hit Points",
-  "Proficiencies",
-];
 
 async function buildSubClassBase(klass, subClass) {
   delete klass['_id'];
@@ -96,20 +86,23 @@ export async function getSubClasses(data) {
 
   let subClasses = [];
   let classFeatures = [];
+  let results = [];
 
   data.forEach((subClass) => {
-    logger.debug(`${subClass.fullName} feature parsing started...`);
+    const classMatch = DDB_CONFIG.classConfigurations.find((k) => k.id === subClass.parentClassId);
+    logger.debug(`${subClass.name} feature parsing started...`);
     subClass.classFeatures.forEach((feature) => {
       const existingFeature = classFeatures.some((f) => f.name === feature.name);
       logger.debug(`${feature.name} feature starting...`);
       if (!NO_TRAITS.includes(feature.name.trim()) && !existingFeature) {
-        const parsedFeature = getClassFeature(feature, subClass);
+        const parsedFeature = getClassFeature(feature, subClass, subClass.name);
         classFeatures.push(parsedFeature);
+        results.push({ class: classMatch.name, subClass: subClass.name, feature: feature.name });
       }
     });
   });
 
-  const fiddledClassFeatures = await srdFiddling(classFeatures, "classes");
+  const fiddledClassFeatures = await srdFiddling(classFeatures, "features");
   munchNote(`Importing ${fiddledClassFeatures.length} features!`, true);
   await updateCompendium("features", { features: fiddledClassFeatures }, updateBool);
 
@@ -142,5 +135,6 @@ export async function getSubClasses(data) {
 
   await updateCompendium("classes", { classes: fiddledClasses }, updateBool);
 
-  return fiddledClasses.concat(fiddledClassFeatures);
+  // return fiddledClasses.concat(fiddledClassFeatures);
+  return results;
 }

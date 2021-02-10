@@ -26,6 +26,8 @@ import utils from "../../utils.js";
 import { parseMagicItem, getAttunement } from "./magicify.js";
 import logger from "../../logger.js";
 
+import { fixItems } from "./special.js";
+
 /**
  * We get extra damage to a weapon attack here, for example Improved
  * Divine Smite
@@ -81,12 +83,12 @@ function getWarlockFeatures(ddb, weapon) {
 }
 
 function getMonkFeatures(ddb, weapon) {
-  const kenseiWeapon = ddb.character.modifiers.class.some((mod) =>
+  const kenseiWeapon = utils.getChosenClassModifiers(ddb).some((mod) =>
     mod.friendlySubtypeName === weapon.definition.type &&
     mod.type === "kensei"
   );
 
-  const monkWeapon = ddb.character.modifiers.class.some((mod) =>
+  const monkWeapon = utils.getChosenClassModifiers(ddb).some((mod) =>
     mod.friendlySubtypeName === weapon.definition.type &&
     mod.type == "monk-weapon"
   ) || (weapon.definition.isMonkWeapon && isMartialArtists(ddb.character.classes));
@@ -134,7 +136,19 @@ function getClassFeatures(ddb, weapon) {
   return warlockFeatures.concat(monkFeatures);
 }
 
-function getWeaponFlags(ddb, data) {
+function getCustomValue(data, character, type) {
+  if (!character) return null;
+  const characterValues = character.flags.ddbimporter.dndbeyond.characterValues;
+  const customValue = characterValues.filter((value) => value.valueId == data.id && value.valueTypeId == data.entityTypeId);
+
+  if (customValue) {
+    const value = customValue.find((value) => value.typeId == type);
+    if (value) return value.value;
+  }
+  return null;
+}
+
+function getWeaponFlags(ddb, data, character) {
   let flags = {
     damage: {
       parts: [],
@@ -163,6 +177,13 @@ function getWeaponFlags(ddb, data) {
     // do we have dueling fighting style?
     if (utils.hasChosenCharacterOption(ddb, "Dueling")) {
       flags.classFeatures.push("Dueling");
+    }
+    // do we have dueling fighting style?
+    if (utils.hasChosenCharacterOption(ddb, "Two-Weapon Fighting")) {
+      flags.classFeatures.push("Two-Weapon Fighting");
+    }
+    if (getCustomValue(data, character, 18)) {
+      flags.classFeatures.push("OffHand");
     }
   }
   // ranged fighting style is added as a global modifier elsewhere
@@ -226,18 +247,6 @@ function otherGear (ddb, data) {
   return item;
 }
 
-function getCustomValue(data, character, type) {
-  if (!character) return null;
-  const characterValues = character.flags.ddbimporter.dndbeyond.characterValues;
-  const customValue = characterValues.filter((value) => value.valueId == data.id && value.valueTypeId == data.entityTypeId);
-
-  if (customValue) {
-    const value = customValue.find((value) => value.typeId == type);
-    if (value) return value.value;
-  }
-  return null;
-}
-
 function addCustomValues(ddbItem, foundryItem, character) {
   // to hit override requires a lot of crunching
   // const toHitOverride = getCustomValue(item, character, 13);
@@ -248,7 +257,11 @@ function addCustomValues(ddbItem, foundryItem, character) {
   const weightOverride = getCustomValue(ddbItem, character, 22);
   // dual wield 18
   // silvered
+  const silvered = getCustomValue(ddbItem, character, 20);
   // adamantine
+  const adamantine = getCustomValue(ddbItem, character, 21);
+  // off-hand
+  // const offHand = getCustomValue(ddbItem, character, 18);
 
   if (toHitBonus) foundryItem.data.attackBonus += toHitBonus;
   if (damageBonus && foundryItem.data.damage.parts.length !== 0) {
@@ -259,6 +272,8 @@ function addCustomValues(ddbItem, foundryItem, character) {
   }
   if (costOverride) foundryItem.data.cost = costOverride;
   if (weightOverride) foundryItem.data.weight = weightOverride;
+  if (silvered) foundryItem.data.properties['sil'] = true;
+  if (adamantine) foundryItem.data.properties['ada'] = true;
 }
 
 // the filter type "Other Gear" represents the equipment while the other filters represents the magic items in ddb
@@ -272,7 +287,7 @@ function parseItem(ddb, data, character) {
           if (data.definition.type === "Ammunition" || data.definition.subType === "Ammunition") {
             item = parseAmmunition(data, "Ammunition");
           } else {
-            const flags = getWeaponFlags(ddb, data);
+            const flags = getWeaponFlags(ddb, data, character);
             item = parseWeapon(data, character, flags);
           }
           break;
@@ -314,6 +329,8 @@ function parseItem(ddb, data, character) {
       if (filter) item.flags.ddbimporter.dndbeyond['filterType'] = filter.filterType;
     }
     item.flags.ddbimporter['id'] = data.id;
+    item.flags.ddbimporter['entityTypeId'] = data.entityTypeId;
+
     return item;
   } catch (err) {
     logger.warn(
@@ -343,6 +360,35 @@ function getName(data, character) {
   }
 }
 
+function enrichFlags(data, item) {
+  if (data.definition.magic) {
+    if (item.data.properties) {
+      item.data.properties['mgc'] = true;
+    } else {
+      item.data.properties = { mgc: true };
+    }
+  }
+  if (item.data.uses?.max && !item.flags?.betterRolls5e) {
+    item.flags['betterRolls5e'] = {
+      quickCharges: {
+        value: {
+          use: true,
+          resource: true
+        },
+        altValue: {
+          use: true,
+          resource: true
+        }
+      },
+    };
+  }
+  if (data.definition?.entityTypeId) item.flags.ddbimporter['definitionEntityTypeId'] = data.definition.entityTypeId;
+  if (data.definition?.id) item.flags.ddbimporter['definitionId'] = data.definition.id;
+  if (data.entityTypeId) item.flags.ddbimporter['entityTypeId'] = data.entityTypeId;
+  if (data.id) item.flags.ddbimporter['id'] = data.id;
+  if (data.definition?.tags) item.flags.ddbimporter.dndbeyond['tags'] = data.definition.tags;
+  if (data.definition?.sources) item.flags.ddbimporter.dndbeyond['sources'] = data.definition.sources;
+}
 
 export default function getInventory(ddb, character, itemSpells) {
   let items = [];
@@ -367,13 +413,18 @@ export default function getInventory(ddb, character, itemSpells) {
     : [];
 
   for (let entry of ddb.character.inventory.concat(customItems)) {
+    const originalName = entry.definition.name;
     entry.definition.name = getName(entry, character);
     var item = Object.assign({}, parseItem(ddb, entry, character));
     addCustomValues(entry, item, character);
+    enrichFlags(entry, item);
     if (item) {
       item.flags.magicitems = parseMagicItem(entry, itemSpells);
+      item.flags.ddbimporter.originalName = originalName;
       items.push(item);
     }
   }
+
+  fixItems(items);
   return items;
 }

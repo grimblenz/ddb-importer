@@ -21,6 +21,43 @@ const CLASS_TEMPLATE = {
   "img": null
 };
 
+export const NO_TRAITS = [
+  "Speed",
+  "Ability Score Increase",
+  "Ability Score Improvement",
+  "Size",
+  "Feat",
+  "Languages",
+  "Hit Points",
+  "Proficiencies",
+  "Bonus Proficiencies",
+  "Bonus Proficiency",
+  "Extra Attack",
+  "Tool Proficiency",
+  "Bonus Cantrip",
+  "Bonus Cantrips",
+];
+
+export const FEATURE_DUP = [
+  "Expertise",
+  "Fighting Style",
+  "Land's Stride",
+  "Otherworldly Patron",
+  "Pact Magic",
+  "Potent Spellcasting",
+  "Timeless Body",
+  "Unarmored Defense",
+  "Circle Spells",
+  "Divine Strike",
+  "Evasion",
+  "Channel Divinity",
+  "Expanded Spell List",
+  "Oath Spells",
+  "Psionic Power",
+  "Psychic Blades",
+  "Spellcasting",
+];
+
 function buildBase(data) {
   let result = JSON.parse(JSON.stringify(CLASS_TEMPLATE));
 
@@ -45,12 +82,16 @@ export function getClassFeature(feature, klass, subClassName = "") {
 
   let result = buildBase(feature);
 
+  const duplicateFeature = FEATURE_DUP.includes(feature.name);
+  result.name = (duplicateFeature) ? `${feature.name} (${klass.name})` : feature.name;
+
   result.flags.ddbimporter['featureId'] = feature.id;
   result.flags.ddbimporter['requiredLevel'] = feature.requiredLevel;
   result.flags.ddbimporter['prerequisite'] = feature.prerequisite;
   result.flags.ddbimporter['class'] = klass.name;
   result.flags.ddbimporter['classId'] = klass.id;
   result.flags.ddbimporter['subClass'] = subClassName;
+  result.data.requirements = klass.name;
 
   return result;
 }

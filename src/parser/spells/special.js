@@ -1,11 +1,12 @@
 import DICTIONARY from "../../dictionary.js";
 import logger from "../../logger.js";
+import utils from "../../utils.js";
 
 let getEldritchInvocations = (data) => {
   let damage = 0;
   let range = 0;
 
-  const eldritchBlastMods = data.character.modifiers.class.filter(
+  const eldritchBlastMods = utils.getChosenClassModifiers(data).filter(
     (modifier) => modifier.type === "eldritch-blast" && modifier.isGranted
   );
 
@@ -77,6 +78,7 @@ function addCustomValues(item, ddb) {
  * @param {*} ddb
  * @param {*} items
  */
+/* eslint-disable complexity */
 export function fixSpells(ddb, items) {
   items.forEach((spell) => {
     switch (spell.name) {
@@ -116,8 +118,27 @@ export function fixSpells(ddb, items) {
       case "Magic Missile":
         spell.data.actionType = "other";
         break;
+      // dnd beyond lists a damage for each type
       case "Chaos Bolt":
         spell.data.damage = { parts: [["2d8", ""], ["1d6", ""]], versatile: "", value: "" };
+        break;
+      // dnd beyond lists a damage for each type
+      case "Chromatic Orb":
+        spell.data.damage = { parts: [["3d8", ""]], versatile: "", value: "" };
+        spell.data.chatFlavor = "Choose from Acid, Cold, Fire, Lightning, Poison, Thunder, or Acid";
+        break;
+      case "Dragon's Breath":
+        spell.data.damage = { parts: [["3d6", ""]], versatile: "", value: "" };
+        spell.data.chatFlavor = "Choose one of Acid, Cold, Fire, Lightning, or Poison.";
+        break;
+      case "Hunter's Mark":
+      case "Hunter’s Mark":
+        spell.data.damage = { parts: [["1d6", ""]], versatile: "", value: "" };
+        spell.data.actionType = "other";
+        break;
+      case "Absorb Elements":
+        spell.data.damage = { parts: [["1d6", ""]], versatile: "", value: "" };
+        spell.data.chatFlavor = "Choose one of Acid, Cold, Fire, Lightning, or Poison.";
         break;
       case "Booming Blade":
         spell.data.damage = { parts: [["0", "thunder"]], versatile: "1d8", value: "" };
@@ -129,11 +150,32 @@ export function fixSpells(ddb, items) {
         spell.data.scaling = { mode: "cantrip", formula: "1d8" };
         spell.data.actionType = "other";
         break;
+      case "Toll the Dead":
+        spell.data.scaling = { mode: "cantrip", formula: "" };
+        break;
       case "Goodberry":
         spell.data.damage = { parts: [["1", "healing"]], versatile: "", value: "" };
+        break;
+      case "Flaming Sphere":
+        spell.data.target['value'] = 2.5;
+        break;
+      case "Spirit Guardians": {
+        if (!ddb) break;
+        const radiantAlignments = [1, 2, 3, 4, 5, 6, 10, 14];
+        const necroticAlignments = [7, 8, 9, 11];
+        if (radiantAlignments.includes(ddb.character.alignmentId)) {
+          spell.data.damage = { parts: [["3d8", "radiant"]], versatile: "", value: "" };
+        } else if (necroticAlignments.includes(ddb.character.alignmentId)) {
+          spell.data.damage = { parts: [["3d8", "necrotic"]], versatile: "", value: "" };
+        }
+        break;
+      }
       // no default
     }
 
   if (ddb) addCustomValues(spell, ddb);
   });
 }
+/* eslint-enable complexity */
+
+

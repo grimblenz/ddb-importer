@@ -61,17 +61,33 @@ export function getSpecialTraits(monster, DDB_CONFIG) {
   let action = dynamicActions[0];
 
   dom.childNodes.forEach((node) => {
-    const switchAction = dynamicActions.find((act) => node.textContent.startsWith(act.name));
+    // const switchAction = dynamicActions.find((act) => node.textContent.startsWith(act.name));
+    const nodeName = node.textContent.split('.')[0].trim();
+    const switchAction = dynamicActions.find((act) => nodeName === act.name);
+    let startFlag = false;
     if (switchAction) {
       if (action.data.description.value !== "" && hideDescription) {
         action.data.description.value += addPlayerDescription(monster, action);
       }
       action = switchAction;
-      if (action.data.description.value === "" && hideDescription) {
-        action.data.description.value = "<section class=\"secret\">\n";
+      if (action.data.description.value === "") {
+        startFlag = true;
+        if (hideDescription) {
+          action.data.description.value = "<section class=\"secret\">\n";
+        }
       }
     }
-    if (node.outerHTML) action.data.description.value += node.outerHTML;
+    if (node.outerHTML) {
+      let outerHTML = node.outerHTML;
+      if (switchAction && startFlag) {
+        outerHTML = outerHTML.replace(`${nodeName}.`, "");
+      }
+      action.data.description.value += outerHTML;
+    }
+
+    // If we have already parsed bits of this action, we probably don't want to
+    // do it again!
+    // if (!startFlag) return;
 
     const activationCost = getActivation(node.textContent);
     if (activationCost) {
@@ -90,6 +106,10 @@ export function getSpecialTraits(monster, DDB_CONFIG) {
       action.data.actionType = "save";
     }
     action.data.damage = getDamage(node.textContent);
+    // assumption - if the action type is not set but there is damage, the action type is other
+    if (!action.data.actionType && action.data.damage.parts.length != 0) {
+      action.data.actionType = "other";
+    }
 
     // legendary resistance check
     const actionMatch = node.textContent.match(/Legendary Resistance \((\d+)\/Day\)/);

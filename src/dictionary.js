@@ -61,6 +61,7 @@ const DICTIONARY = {
     { id: "dusk", value: "day" },
     { id: "Consumable", value: "charges" },
     { id: "Other", value: "charges" },
+    { id: "", value: "" },
   ],
   character: {
     abilities: [
@@ -435,6 +436,9 @@ const DICTIONARY = {
       { name: "Versatile", value: "ver" },
       { name: "Returning", value: "ret" },
       { name: "Focus", value: "foc" },
+      { name: "Adamantine", value: "ada" },
+      { name: "Magical", value: "mgc" },
+      { name: "Silvered", value: "sil" },
     ],
   },
   actions: {
