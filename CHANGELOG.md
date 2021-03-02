@@ -1,3 +1,40 @@
+# 0.4.17
+
+* Monster parsing: some cantrips did not import.
+* Updating character/token name is now optional - thanks @Naito!
+
+# 0.4.15/16
+
+* Lizard folk bite attack would use a lower martial arts dice if lizard folk was a monk.
+
+# 0.4.14
+
+* Monster parsing failed due to skills formatting change.
+* Artificer flamethrower added +mod to damage.
+
+# 0.4.13
+
+* Some characters would not import.
+
+# 0.4.11/0.4.12
+
+* Some users with an expired or no cobalt token could no longer import characters.
+
+# 0.4.10
+
+* Extras parsing was broken in 0.4.8.
+* Racial Trait Icons added to internal dictionary - all hail @Zac !
+
+# 0.4.8/0.4.9
+
+* Custom languages now import separately
+* Attempt to correct weirdness with optional feature modifier selection on character imports.
+
+# 0.4.7
+
+* In some situations the Unarmored AC would not add unarmored bonuses from items.
+* (Regression) Monsters did not detect expertise skills. (0.4.0-0.4.6).
+
 # 0.4.6
 
 * Claws added to weapon icons.

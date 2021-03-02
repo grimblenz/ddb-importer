@@ -19,6 +19,7 @@ export const SKILLS = [
   { name: "sur", label: "Survival", ability: "wis", subType: "survival", valueId: 15 },
 ];
 
+import logger from "../../logger.js";
 import { ABILITIES } from "./abilities.js";
 
 // skills: [
@@ -59,17 +60,25 @@ export function getSkills (skills, monster, DDB_CONFIG) {
 
     skills[key].mod = mod;
 
+    const calculatedScore = proficiencyBonus + mod;
+
     if (monsterSkill) {
       skills[key].value = 1;
       skills[key].prof = proficiencyBonus;
       skills[key].bonus = monsterSkill.additionalBonus || 0;
     }
-    const calculatedScore = skills[key].prof + mod + skills[key].bonus;
+
     skills[key].total = calculatedScore;
     skills[key].passive = 10 + calculatedScore;
 
-    if (monsterSkill) {
-      if (monsterSkill.value > calculatedScore) {
+    if (monsterSkill && monsterSkill.value != calculatedScore) {
+      if (monsterSkill.value == calculatedScore + proficiencyBonus) {
+        skills[key].passive += proficiencyBonus;
+        skills[key].value = 2;
+        skills[key].total += proficiencyBonus;
+        skills[key].prof += proficiencyBonus;
+        skills[key].bonus = 0;
+      } else if (monsterSkill.value > calculatedScore + proficiencyBonus) {
         skills[key].passive += proficiencyBonus;
         skills[key].value = 2;
         skills[key].total += proficiencyBonus;
@@ -88,11 +97,20 @@ export function getSkillsHTML (skills, monster, DDB_CONFIG) {
   //  "skillsHtml": "History + 12, Perception + 10"
   const skillsHTML = monster.skillsHtml.split(',');
   const skillsMaps = skillsHTML.filter((str) => str != '').map((str) => {
-    const skillMatch = str.match(/(\w+\s*\w*\s*\w*) ([+-]) (\d+)/);
-    return {
-      name: skillMatch[1],
-      value: skillMatch[2] + skillMatch[3],
-    };
+    const skillMatch = str.match(/(\w+\s*\w*\s*\w*)(?:\s*)([+-])(?:\s*)(\d+)/);
+    let result = {};
+    if (skillMatch) {
+      result = {
+        name: skillMatch[1],
+        value: skillMatch[2] + skillMatch[3],
+      };
+    } else {
+      logger.error(`Skill Parsing failed for ${monster.name}`);
+      logger.debug(skillsHTML);
+      logger.debug(str);
+      logger.debug(skillMatch);
+    }
+    return result;
   });
 
   const keys = Object.keys(skills);
